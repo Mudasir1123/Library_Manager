@@ -12,45 +12,17 @@ LIBRARY_FILE = "library.json"
 covers_dir = "covers"
 os.makedirs(covers_dir, exist_ok=True)
 
-# Set Tesseract OCR path (update this based on your system)
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Dynamically set Tesseract path (works for local & cloud environments)
+tesseract_path = "/usr/bin/tesseract" if os.name != "nt" else r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
-# Streamlit page configuration with custom theme
+# Streamlit page configuration
 st.set_page_config(
     page_title="📚 Personal Library Manager",
     page_icon="📖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Apply custom styling
-st.markdown("""
-    <style>
-        body {
-            background-color: #f4f4f4;
-        }
-        .stApp {
-            background-color: #f7f7f7;
-        }
-        .css-1d391kg {
-            background-color: #ffffff;
-        }
-        .stButton button {
-            background-color: #2a9d8f !important;
-            color: white !important;
-            font-size: 16px;
-            border-radius: 10px;
-            transition: 0.3s;
-        }
-        .stButton button:hover {
-            background-color: #1e7a6d !important;
-            transform: scale(1.05);
-        }
-        .stTextInput, .stNumberInput, .stTextArea {
-            border-radius: 10px;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 # Load or create library data
 def load_library():
@@ -65,7 +37,7 @@ def save_library(library):
         json.dump(library, file, indent=4)
 
 # Add a book function
-def add_book(library, title, author, year, genre, read, rating=0, notes=""):
+def add_book(library, title, author, year, genre, read, rating=0, notes="", cover_path=""):
     book = {
         "title": title,
         "author": author,
@@ -74,6 +46,7 @@ def add_book(library, title, author, year, genre, read, rating=0, notes=""):
         "read": read,
         "rating": rating,
         "notes": notes,
+        "cover": cover_path,
         "date_added": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     library.append(book)
@@ -91,17 +64,18 @@ def remove_book(library, title):
             return
     st.error("⚠️ Book not found!")
 
-# Upload and Extract Text
+# Sidebar - Upload and Extract Text
 st.sidebar.header("📂 Upload Book Cover")
 cover_image = st.sidebar.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
 
+cover_path = ""
 if cover_image:
     img = Image.open(cover_image)
     st.sidebar.image(img, caption="📸 Uploaded Cover", use_container_width=True)
     
     # Save image
-    image_path = os.path.join(covers_dir, cover_image.name)
-    img.save(image_path)
+    cover_path = os.path.join(covers_dir, cover_image.name)
+    img.save(cover_path)
 
     # Extract text using OCR
     extracted_text = pytesseract.image_to_string(img)
@@ -131,7 +105,7 @@ if menu == "➕ Add Book":
         
         if submitted:
             if title and author and genre:
-                add_book(library, title, author, year, genre, read, rating, notes)
+                add_book(library, title, author, year, genre, read, rating, notes, cover_path)
             else:
                 st.error("⚠️ Please fill in all required fields before submitting.")
 
@@ -140,11 +114,10 @@ elif menu == "🔍 Search Books":
     st.subheader("🔎 Search for a Book")
 
     if library:
-        search_query = st.selectbox("📖 Select a book", [""] + [f"{book['title']} - {book['author']}" for book in library])
-
+        search_query = st.text_input("🔍 Search by Title or Author")
+        
         if search_query:
-            selected_title = search_query.split(" - ")[0]  
-            results = [book for book in library if book["title"] == selected_title]
+            results = [book for book in library if search_query.lower() in book["title"].lower() or search_query.lower() in book["author"].lower()]
 
             if results:
                 for book in results:
@@ -154,6 +127,8 @@ elif menu == "🔍 Search Books":
                         st.markdown(f"**Rating:** {'⭐' * book['rating']}")
                         if book['notes']:
                             st.markdown(f"**Notes:** {book['notes']}")
+            else:
+                st.warning("❌ No matching books found.")
 
 # View All Books Section
 elif menu == "📜 View All Books":
@@ -171,7 +146,7 @@ elif menu == "🗑 Remove a Book":
     
     if book_titles:
         title = st.selectbox("❌ Select a book to remove", [""] + book_titles)
-        if title and title != "":
+        if title and title != "":  # Avoid empty selections
             if st.button("🗑 Remove Book"):
                 remove_book(library, title)
     else:
@@ -193,10 +168,11 @@ elif menu == "📊 Library Stats":
 
     st.progress(int(percentage_read))
 
-    genres = {book["genre"]: 0 for book in library}
+    # Display popular genres
+    genres = {}
     for book in library:
-        genres[book["genre"]] += 1
-    
+        genres[book["genre"]] = genres.get(book["genre"], 0) + 1
+
     st.subheader("📌 Popular Genres")
-    for genre, count in genres.items():
+    for genre, count in sorted(genres.items(), key=lambda x: x[1], reverse=True):
         st.markdown(f"- **{genre}**: {count} books")
