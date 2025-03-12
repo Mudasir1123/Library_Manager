@@ -97,7 +97,7 @@ cover_image = st.sidebar.file_uploader("Upload an image", type=["png", "jpg", "j
 
 if cover_image:
     img = Image.open(cover_image)
-    st.sidebar.image(img, caption="📸 Uploaded Cover", use_column_width=True)
+    st.sidebar.image(img, caption="📸 Uploaded Cover", use_container_width=True)
     
     # Save image
     image_path = os.path.join(covers_dir, cover_image.name)
